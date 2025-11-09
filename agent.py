@@ -216,10 +216,10 @@ def handle_tools(tools, response):
         if item_type == "reasoning":
             pending_reasoning = item
             continue
+        if pending_reasoning is not None:
+            context.append(pending_reasoning)
+            pending_reasoning = None
         if item_type == "function_call":
-            if pending_reasoning is not None:
-                context.append(pending_reasoning)
-                pending_reasoning = None
             context.extend(tool_call(item))
     return len(context) != osz
 
