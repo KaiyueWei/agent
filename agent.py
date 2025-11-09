@@ -209,12 +209,17 @@ def handle_tools(tools, response):
     outs = getattr(response, "output", None)
     if not outs:
         return False
-    first = outs[0] if len(outs) > 0 else None
-    if first and getattr(first, "type", None) == "reasoning":
-        context.append(first)
     osz = len(context)
+    pending_reasoning = None
     for item in outs:
-        if getattr(item, "type", None) == "function_call":
+        item_type = getattr(item, "type", None)
+        if item_type == "reasoning":
+            pending_reasoning = item
+            continue
+        if item_type == "function_call":
+            if pending_reasoning is not None:
+                context.append(pending_reasoning)
+                pending_reasoning = None
             context.extend(tool_call(item))
     return len(context) != osz
 
