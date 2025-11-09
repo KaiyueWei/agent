@@ -59,9 +59,3 @@ OPENAI_API_KEY=sk-xxx
 - If `tshark` is not found, install Wireshark/tshark or use `pyshark`.
 - If the Responses API shape differs, you may need to adapt `handle_tools` and `tool_call` to match the client response objects.
 
----
-
-If you want, I can also:
-- Add a small REPL command to manage a network whitelist.
-- Add a Docker wrapper for running analysis tools in an isolated container.
-- Add more tool schemas (disassemble, strings, http_fetch) with safety checks.
