@@ -25,6 +25,17 @@ AUTO_APPROVE = os.getenv("AGENT_AUTO_APPROVE", "").lower() in ("1", "true", "yes
 context_dir = Path(__file__).resolve().parent
 LOGFILE = context_dir / "agent.log"
 
+def _item_type(item):
+    """Best-effort extractor for the Responses API `type` field."""
+    try:
+        t = getattr(item, "type")  # duck-typed client objects
+    except Exception:
+        t = None
+    if not t and isinstance(item, dict):
+        t = item.get("type")
+    return t
+
+
 tools = [{
    "type": "function", "name": "ping",
    "description": "ping some host on the internet",
@@ -112,22 +123,22 @@ def call(tools=None, model="gpt-5"):
     # allow callers to pass per-call tools; fall back to global `tools`
     if tools is None:
         tools = globals().get("tools", [])
-    # Filter out any internal 'reasoning' items before sending to the API.
-    # Some Responses API input validations disallow standalone 'reasoning' items.
+    # Preserve reasoning items that immediately precede tool calls, but drop
+    # stray reasoning fragments that would otherwise fail validation.
     safe_input = []
-    for it in context:
-        # support both object-like items returned by the client and plain dicts
-        t = None
-        try:
-            t = getattr(it, "type", None)
-        except Exception:
-            t = None
+    idx = 0
+    while idx < len(context):
+        item = context[idx]
+        t = _item_type(item)
         if t == "reasoning":
-            # skip internal reasoning fragments
+            nxt = context[idx + 1] if idx + 1 < len(context) else None
+            if _item_type(nxt) == "function_call":
+                safe_input.append(item)
+            # Skip standalone reasoning entries either way.
+            idx += 1
             continue
-        if isinstance(it, dict) and it.get("type") == "reasoning":
-            continue
-        safe_input.append(it)
+        safe_input.append(item)
+        idx += 1
 
     return client.responses.create(model=model, tools=tools, input=safe_input)
 
@@ -230,4 +241,3 @@ def main() -> NoReturn:
 
 if __name__ == "__main__":
     main()
-
