@@ -16,7 +16,14 @@ if not api_key:
     raise ValueError("Missing OPENAI_API_KEY in environment variables or .env file")
 
 client = OpenAI(api_key=api_key)
-context: list[dict[str, str]] = []
+SYSTEM_PROMPT = (
+    "You are the CyberSci DFIR assistant. After every tool execution you receive, "
+    "summarize the findings in plain language before deciding on another action. "
+    "Request at most one new tool call per response, and only if you clearly explain "
+    "why it is needed. If the tool output is empty or inconclusive, state that and "
+    "either answer with what you know or ask the user how to proceed."
+)
+context: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
 # Auto-approve tool calls when AGENT_AUTO_APPROVE is set to 1/true/yes
 AUTO_APPROVE = os.getenv("AGENT_AUTO_APPROVE", "").lower() in ("1", "true", "yes")
