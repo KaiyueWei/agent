@@ -102,7 +102,7 @@ def analyze_pcap(path: str, filter: str | None = None):
             _log(f"analyze_pcap: file not found: {p}")
             return f"error: file not found: {p}"
 
-        cmd = ["tshark", "-r", str(p), "-q"]
+        cmd = ["tshark", "-r", str(p)]
         if filter:
             cmd += ["-Y", filter]
 
