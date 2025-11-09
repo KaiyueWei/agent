@@ -109,7 +109,24 @@ def call(tools=None, model="gpt-5"):
     # allow callers to pass per-call tools; fall back to global `tools`
     if tools is None:
         tools = globals().get("tools", [])
-    return client.responses.create(model=model, tools=tools, input=context)
+    # Filter out any internal 'reasoning' items before sending to the API.
+    # Some Responses API input validations disallow standalone 'reasoning' items.
+    safe_input = []
+    for it in context:
+        # support both object-like items returned by the client and plain dicts
+        t = None
+        try:
+            t = getattr(it, "type", None)
+        except Exception:
+            t = None
+        if t == "reasoning":
+            # skip internal reasoning fragments
+            continue
+        if isinstance(it, dict) and it.get("type") == "reasoning":
+            continue
+        safe_input.append(it)
+
+    return client.responses.create(model=model, tools=tools, input=safe_input)
 
 def _extract_call_id(item):
     # defensive extraction for different client shapes
