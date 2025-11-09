@@ -130,18 +130,14 @@ def call(tools=None, model="gpt-5"):
     # allow callers to pass per-call tools; fall back to global `tools`
     if tools is None:
         tools = globals().get("tools", [])
-    # Preserve reasoning items that immediately precede tool calls, but drop
-    # stray reasoning fragments that would otherwise fail validation.
+    # Skip reasoning/function_call items when replaying history; the Responses API
+    # already tracks tool invocations, it only needs the resulting outputs/messages.
     safe_input = []
     idx = 0
     while idx < len(context):
         item = context[idx]
         t = _item_type(item)
-        if t == "reasoning":
-            nxt = context[idx + 1] if idx + 1 < len(context) else None
-            if _item_type(nxt) == "function_call":
-                safe_input.append(item)
-            # Skip standalone reasoning entries either way.
+        if t in {"reasoning", "function_call"}:
             idx += 1
             continue
         safe_input.append(item)
@@ -210,16 +206,8 @@ def handle_tools(tools, response):
     if not outs:
         return False
     osz = len(context)
-    pending_reasoning = None
     for item in outs:
-        item_type = getattr(item, "type", None)
-        if item_type == "reasoning":
-            pending_reasoning = item
-            continue
-        if pending_reasoning is not None:
-            context.append(pending_reasoning)
-            pending_reasoning = None
-        if item_type == "function_call":
+        if getattr(item, "type", None) == "function_call":
             context.extend(tool_call(item))
     return len(context) != osz
 
