@@ -1,4 +1,4 @@
-# CyberSci Agent (Kali)
+# Security Agent (Kali)
 
 This repository contains a small interactive agent (`agent.py`) that uses the OpenAI Responses API and a small set of local tools to help with CTF-style cybersecurity challenges. This README covers quick setup for Kali Linux and safety recommendations.
 
