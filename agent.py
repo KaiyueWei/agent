@@ -70,17 +70,22 @@ def analyze_pcap(path: str, filter: str | None = None):
     Returns stdout or an error string.
     """
     try:
-        p = Path(path)
+        # expand user (~) and resolve relative to workspace
+        p = Path(path).expanduser()
         if not p.is_absolute():
             p = (context_dir / p).resolve()
         else:
             p = p.resolve()
 
-        # Ensure path is inside workspace
-        if not str(p).startswith(str(context_dir)):
+        # Ensure path is inside workspace (use relative_to for a robust check)
+        try:
+            p.relative_to(context_dir)
+        except Exception:
+            _log(f"analyze_pcap: denied path outside workspace: {p}")
             return f"error: pcap path {p} is outside the workspace ({context_dir})"
 
         if not p.exists() or not p.is_file():
+            _log(f"analyze_pcap: file not found: {p}")
             return f"error: file not found: {p}"
 
         cmd = ["tshark", "-r", str(p), "-q"]
