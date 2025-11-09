@@ -18,6 +18,9 @@ if not api_key:
 client = OpenAI(api_key=api_key)
 context: list[dict[str, str]] = []
 
+# Auto-approve tool calls when AGENT_AUTO_APPROVE is set to 1/true/yes
+AUTO_APPROVE = os.getenv("AGENT_AUTO_APPROVE", "").lower() in ("1", "true", "yes")
+
 # Workspace dir and simple audit log
 context_dir = Path(__file__).resolve().parent
 LOGFILE = context_dir / "agent.log"
@@ -154,8 +157,16 @@ def tool_call(item):    # handles one tool with confirmation and validation
 
     # Prompt user for confirmation for sensitive actions (file/network)
     print(f"Model requested tool call: {name} with args: {args}")
-    resp = input("Allow this tool call? [y/N]: ").strip().lower()
-    if resp not in {"y", "yes"}:
+    # If AGENT_AUTO_APPROVE is set, auto-approve calls (useful for debugging)
+    if AUTO_APPROVE:
+        _log(f"tool_call: auto-approved name={name} args={args} call_id={cid}")
+        print("(auto-approved by AGENT_AUTO_APPROVE)")
+        approved = True
+    else:
+        resp = input("Allow this tool call? [y/N]: ").strip().lower()
+        approved = resp in {"y", "yes"}
+
+    if not approved:
         _log(f"tool_call: denied name={name} args={args} call_id={cid}")
         return [item, {"type": "function_call_output", "call_id": cid, "output": "(denied by user)"}]
 
