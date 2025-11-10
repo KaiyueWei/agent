@@ -261,7 +261,7 @@ def process(line):
     context.append({"role": "user", "content": line})
     response = call()
     # resolve tool calls with a safety cap
-    for _ in range(6):
+    for _ in range(10):
         if not handle_tools(tools, response):
             break
         response = call()
