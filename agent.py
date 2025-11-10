@@ -64,6 +64,16 @@ tools = [{
            "filter": {"type": "string", "description": "optional display filter for tshark"}
        },
        "required": ["path"],
+    },},
+    {
+   "type": "function", "name": "run_shell",
+   "description": "Run a bash command inside the workspace (e.g., unzip files, list directories).",
+   "parameters": {
+       "type": "object", "properties": {
+           "command": {"type": "string", "description": "Command string to run via bash -lc"},
+           "timeout": {"type": "integer", "description": "Optional timeout in seconds (default 20)"},
+       },
+       "required": ["command"],
     },},]
 
 def ping(host=""):
@@ -124,6 +134,27 @@ def analyze_pcap(path: str, filter: str | None = None):
         return "error: analysis timed out"
     except FileNotFoundError:
         return "error: tshark not found on PATH. Install Wireshark/tshark or use pyshark."
+    except Exception as e:
+        return f"error: {e}"
+
+def run_shell(command: str, timeout: int = 20):
+    """Run a bash command with cwd pinned to the workspace."""
+    try:
+        result = subprocess.run(
+            ["bash", "-lc", command],
+            cwd=context_dir,
+            text=True,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+            timeout=timeout
+        )
+        _log(f"run_shell: cmd={command!r} exit={result.returncode}")
+        output = result.stdout
+        if len(output) > 20000:
+            output = output[:20000] + "\n... (truncated)"
+        return output if output else f"(exit {result.returncode})"
+    except subprocess.TimeoutExpired:
+        return "error: shell command timed out"
     except Exception as e:
         return f"error: {e}"
     
@@ -192,6 +223,8 @@ def tool_call(item):    # handles one tool with confirmation and validation
             result = ping(**args)
         elif name == "analyze_pcap":
             result = analyze_pcap(**args)
+        elif name == "run_shell":
+            result = run_shell(**args)
         else:
             result = f"error: unknown tool {name}"
     except Exception as e:
