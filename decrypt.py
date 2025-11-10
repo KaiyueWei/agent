@@ -19,6 +19,7 @@ Notes:
 
 import argparse
 import base64
+import binascii
 import hashlib
 import re
 import sys
@@ -28,13 +29,20 @@ from cryptography.hazmat.primitives import hashes, padding as sympadding, serial
 from cryptography.hazmat.primitives.asymmetric import padding as asympadding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+HEX_CHAR_RE = re.compile(rb'^[0-9a-fA-F\s]+$')
+
 
 def try_base64_decode(data: bytes):
     """Try base64 decode; return bytes or raise."""
     try:
         return base64.b64decode(data, validate=True)
-    except Exception:
-        raise
+    except binascii.Error:
+        cleaned = re.sub(rb'\s+', b'', data)
+        try:
+            return base64.b64decode(cleaned, validate=True)
+        except Exception:
+            # Fall back to permissive decode (accepts misplaced padding) before giving up.
+            return base64.b64decode(cleaned, validate=False)
 
 
 def try_hex_decode(data: bytes):
@@ -56,6 +64,14 @@ def try_hex_decode(data: bytes):
 def normalize_input_file(path: Path, out_bin: Path):
     """Read path, attempt base64 -> hex -> raw, write normalized bytes to out_bin."""
     raw = path.read_bytes()
+    # Treat inputs that only contain hex digits/whitespace as hex before attempting base64.
+    if HEX_CHAR_RE.fullmatch(raw):
+        try:
+            dec = try_hex_decode(raw)
+            out_bin.write_bytes(dec)
+            return
+        except Exception:
+            pass
     # Try base64
     try:
         dec = try_base64_decode(raw)
@@ -78,6 +94,18 @@ def rsa_decrypt_rsa_oaep_sha256(priv_pem_path: Path, ciphertext_path: Path) -> b
     priv_pem = priv_pem_path.read_bytes()
     private_key = serialization.load_pem_private_key(priv_pem, password=None)
     ct = ciphertext_path.read_bytes()
+    key_bytes = private_key.key_size // 8
+
+    # Some challenge dumps repeat the same RSA block multiple times; trim if so.
+    if len(ct) != key_bytes and len(ct) % key_bytes == 0:
+        chunk = ct[:key_bytes]
+        if chunk * (len(ct) // key_bytes) == ct:
+            print(f"[!] Detected repeated RSA block ({len(ct)} bytes == {len(ct)//key_bytes} copies). Using first block only.")
+            ct = chunk
+
+    if len(ct) != key_bytes:
+        raise ValueError(f"RSA ciphertext length {len(ct)} bytes does not match key size {key_bytes}.")
+
     pt = private_key.decrypt(
         ct,
         asympadding.OAEP(
@@ -90,9 +118,19 @@ def rsa_decrypt_rsa_oaep_sha256(priv_pem_path: Path, ciphertext_path: Path) -> b
 
 
 def derive_aes_key_from_string(key_string: str) -> bytes:
-    # Compute SHA-256 over the ASCII key_string exactly (no extra newline).
-    b = key_string.encode()
-    return hashlib.sha256(b).digest()
+    """
+    Compute SHA-256 over the supplied key string.
+
+    Some challenge dumps prepend labels such as 'KEY: ' before the secret.
+    In that case we strip everything up to (and including) the first colon
+    before hashing so the derived key matches the intended value.
+    """
+    payload = key_string
+    if ":" in key_string:
+        label, remainder = key_string.split(":", 1)
+        if label.strip().upper() == "KEY":
+            payload = remainder.strip()
+    return hashlib.sha256(payload.encode()).digest()
 
 
 def aes_cbc_decrypt_and_unpad(aes_key: bytes, data: bytes) -> bytes:
